@@ -12,10 +12,26 @@ import logging
 import warnings
 root = logging.getLogger()
 root.setLevel(logging.DEBUG)
-# warnings.filterwarnings('ignore')
+warnings.filterwarnings('ignore')
 
 
 class DispersionCalculator(object):
+    """
+    Calculation of linear dispersion through materials. The materials are specified with their
+    Sellmeier coefficients and stored in a dictionary. At creation an internal set of materials
+    is generated (air, fused silica (fs), bbo, sapphire, MgF2) and a materials directory (./materials)
+    is scanned for XML files for additional materials.
+    The XML files contain a sellmeier element and a list of tags A, B, and C with the coefficients.
+
+    To calculate the dispersion, first generate a gaussian pulse with desired pulse duration or
+    spectral width. The time span for the electric field vector and number of points are also
+    specified. Then the propagation through a material is calculated with the propagate_material
+    method. Additional materials can be propagated in turn by subsequent calls to this method.
+    To start over call reset_propagation or generate a new gaussian pulse.
+
+    Analysing the dispersed pulse is done through the get_xxx methods. The phase expansion requires
+    a pulse spectral width of more than 3 nm to be reliable it seems.
+    """
     def __init__(self, t_fwhm=50e-15, l_0=800e-9, t_span=2e-12):
         self.materials_path = "./materials"
         self.c = 299792458.0
@@ -40,6 +56,19 @@ class DispersionCalculator(object):
         self.generate_materials_dict()
 
     def generate_pulse(self, fwhm, l_0, t_span=2e-12, n=None, duration_domain='temporal'):
+        """
+        Generate a gaussian pulse with fwhm parameter in time or spectrum (wavelength).
+        Use SI units.
+        Also generated time and frequency vectors.
+
+        :param fwhm: Pulse width in time or spectrum
+        :param l_0:  Central wavelength
+        :param t_span: Time span for the generated field vector. Should be long enough to cover
+                       the dispersed pulse
+        :param n: Number of points in the generated field vector
+        :param duration_domain: 'temporal' or 'spectral'
+        :return:
+        """
         self.l_0 = l_0
         self.w_0 = 2 * np.pi * self.c / self.l_0
         self.t_span = t_span
@@ -54,22 +83,20 @@ class DispersionCalculator(object):
             tau = fwhm / np.sqrt(2 * np.log(2))
         else:
             tau = 0.441 * l_0**2 / (fwhm * self.c)
-        # self.E_t = np.exp(-self.t ** 2 / tau ** 2 + ph) * np.exp(1j * self.w_0 * self.t)
         self.E_t = np.exp(-self.t ** 2 / tau ** 2 + ph)
         self.E_w = np.fft.fftshift(np.fft.fft(self.E_t))
         self.E_t_out = self.E_t.copy()
         self.E_w_out = self.E_w.copy()
 
     def generate_materials_dict(self):
+        """
+        Generates the internal materials dict from a set of non-sellmeier materials (air, sapphire, bbo..)
+        and the files in the materials directory. The dict stores scipy interp1d interpolators that are
+        used to find the refractive index at specific angular frequencies later.
+        :return:
+        """
         w_mat = 2 * np.pi * self.c / self.l_mat
         l2_mat = (self.l_mat * 1e6) ** 2
-
-        # n_bk7 = np.sqrt(1 + 1.03961212 * l2_mat / (l2_mat - 0.00600069867) +
-        #                 0.231792344 * l2_mat / (l2_mat - 0.0200179144) +
-        #                 1.01046945 * l2_mat / (l2_mat - 103.560653))
-        #
-        # bk7_ip = interp1d(w_mat, n_bk7, bounds_error=False, fill_value=np.nan)
-        # self.materials['bk7'] = bk7_ip
 
         n_air = 1 + 0.05792105 * l2_mat / (238.0185 * l2_mat - 1) + 0.00167917 * l2_mat / (57.362 * l2_mat - 1)
         air_ip = interp1d(w_mat, n_air, bounds_error=False, fill_value=np.nan, kind="quadratic")
@@ -114,6 +141,24 @@ class DispersionCalculator(object):
             self.read_material(''.join((self.materials_path, '/', mat_file)))
 
     def add_material(self, name, b_coeff, c_coeff):
+        """
+        Adds a material to the internal materials dict. The material is specified with it's sellmeier
+        coefficients: n = sqrt(1 + sum(B * l**2 / (l**2 - C))
+
+        The wavelengths are in um as customary in Sellmeier equations.
+
+        The dict stores scipy interp1d interpolators that are used to find the refractive index at
+        specific angular frequencies later.
+
+        :param name: String containing the name of the material (used as key in the dict)
+        :param b_coeff: Vector of B-coefficients for the Sellmeier equation (for lambda in um)
+        :param c_coeff: Vector of C-coefficients for the Sellmeier equation (for lambda in um)
+        :return:
+        """
+        """
+
+        :return:
+        """
         l_mat = np.linspace(200e-9, 2000e-9, 5000)
         w_mat = 2 * np.pi * self.c / l_mat
         l2_mat = (l_mat * 1e6) ** 2
@@ -125,6 +170,20 @@ class DispersionCalculator(object):
         self.materials[name] = n_ip
 
     def read_material(self, filename):
+        """
+        Read an xml file and extract the sellmeier coeffients from it. The file should have
+        elements called sellmeier with tags called A, B, and C. The refractive index is then
+        calculated as:
+        n = sqrt(1 + sum(A + B * l**2 / (l**2 - C))
+
+        The wavelengths are in um as customary in Sellmeier equations.
+
+        The A coefficients were added to allow certain types of materials in the refractiveindex.info
+        database.
+
+        :param filename: String containing the filename
+        :return:
+        """
         l_mat = np.linspace(200e-9, 2000e-9, 5000)
         w_mat = 2 * np.pi * self.c / l_mat
         l2_mat = (l_mat * 1e6) ** 2
@@ -156,7 +215,15 @@ class DispersionCalculator(object):
         self.materials[name] = n_ip
 
     def propagate_material(self, name, thickness):
-        # k_w = self.w * self.materials[name](self.w) / self.c
+        """
+        Propagate the current pulse through a thickness of material. The propagation is performed
+        in the fourier domain by spectral filtering. The pulse is then inverse transformed to
+        the time domain.
+
+        :param name: String containing the name of the material (to match a key in the materials dict)
+        :param thickness: Thickness of the material (SI units)
+        :return:
+        """
         try:
             k_w = (self.w + self.w_0) * self.materials[name](self.w + self.w_0) / self.c
         except KeyError:
@@ -167,6 +234,11 @@ class DispersionCalculator(object):
         self.E_t_out = np.fft.ifft(np.fft.fftshift(self.E_w_out))
 
     def reset_propagation(self):
+        """
+        Resets the propagation to it's initial gaussian pulse.
+
+        :return:
+        """
         self.E_w_out = self.E_w.copy()
         self.E_t_out = self.E_t.copy()
 
@@ -257,11 +329,6 @@ class DispersionCalculator(object):
             E_t = np.roll(self.E_t_out, shift)
             Ew = np.fft.fftshift(np.fft.fft(E_t))
 
-            # ind = np.argmax(abs(self.E_w_out))
-            # shift = (self.E_w_out.shape[0] / 2 - ind).astype(np.int)
-            # Ew = np.roll(self.E_w_out, shift)
-
-            # Ew = self.E_w_out
             # Normalize
             Ew /= abs(Ew).max()
 
@@ -347,7 +414,6 @@ class DispersionCalculator(object):
         return self.t
 
     def get_w(self):
-        # w = np.fft.fftshift(self.w + self.w_0)
         w = self.w + self.w_0
         return w
 

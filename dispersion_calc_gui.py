@@ -239,10 +239,7 @@ class DispersionCalculatorGui(QtGui.QWidget):
 
     def restore_model_selection(self):
         if self.tableview_selected_indexes is not None:
-            print(self.tableview_selected_indexes)
-            print(len(self.tableview_selected_indexes))
             if len(self.tableview_selected_indexes) > 0:
-                print(self.tableview_selected_indexes[0].row(), self.tableview_selected_indexes[0].column())
                 self.material_tableview.selectionModel().select(self.tableview_selected_indexes[0],
                                                                 QtGui.QItemSelectionModel.Select)
                 self.material_tableview.selectionModel().setCurrentIndex(self.tableview_selected_indexes[0],
@@ -289,6 +286,7 @@ class DispersionCalculatorGui(QtGui.QWidget):
         self.material_add_button = QtGui.QPushButton("Add")
         self.material_add_button.setMaximumWidth(40)
         self.material_add_button.pressed.connect(self.add_material)
+        self.material_add_button.setToolTip("Add specified material (combobox+thickness) to material table")
 
         self.material_tableview = QtGui.QTableView()
         self.material_tableview.setModel(self.material_table_model)
@@ -306,6 +304,8 @@ class DispersionCalculatorGui(QtGui.QWidget):
         self.material_tableview.setSizePolicy(sp)
         self.material_table_model.modelAboutToBeReset.connect(self.store_model_selection)
         self.material_table_model.modelReset.connect(self.restore_model_selection)
+        self.material_tableview.setToolTip("Change material or thickness by selecting element and typing, "
+                                           "delete material by pressing delete key")
 
         self.material_plotwidget = pq.PlotWidget(useOpenGL=True,
                                                  labels={'bottom': ('Wavelength', 'm'),
@@ -318,6 +318,7 @@ class DispersionCalculatorGui(QtGui.QWidget):
         sp = self.material_plotwidget.sizePolicy()
         sp.setVerticalStretch(1)
         self.material_plotwidget.setSizePolicy(sp)
+        self.material_plotwidget.setToolTip("Material refractive index")
         # self.material_plotwidget.setSizePolicy(QtGui.QSizePolicy.Minimum, QtGui.QSizePolicy.MinimumExpanding)
 
         material_select_layout = QtGui.QHBoxLayout()
@@ -338,6 +339,7 @@ class DispersionCalculatorGui(QtGui.QWidget):
         self.pulse_temporal_plot = self.pulse_temporal_plotwidget.plot()
         self.pulse_temporal_plot.setPen((50, 150, 250))
         self.pulse_temporal_plotwidget.showGrid(x=True, y=True)
+        self.pulse_temporal_plotwidget.setToolTip("Propagated pulse temporal intensity")
 
         self.pulse_phase_plotwidget = pq.PlotWidget(useOpenGL=True,
                                                        labels={'bottom': ('Angular freq', 'rad/s'),
@@ -345,6 +347,8 @@ class DispersionCalculatorGui(QtGui.QWidget):
         self.pulse_phase_plot = self.pulse_phase_plotwidget.plot()
         self.pulse_phase_plot.setPen((50, 150, 250))
         self.pulse_phase_plotwidget.showGrid(x=True, y=True)
+        self.pulse_phase_plotwidget.setToolTip("Propagated pulse phase profile. If there are artifacts at the edges "
+                                               "try increasing the time span")
 
         self.pulse_spectral_plotwidget = pq.PlotWidget(useOpenGL=True,
                                                        labels={'bottom': ('Wavelength', 'm'),
@@ -352,6 +356,7 @@ class DispersionCalculatorGui(QtGui.QWidget):
         self.pulse_spectral_plot = self.pulse_spectral_plotwidget.plot()
         self.pulse_spectral_plot.setPen((50, 150, 250))
         self.pulse_spectral_plotwidget.showGrid(x=True, y=True)
+        self.pulse_spectral_plotwidget.setToolTip("Initial pulse spectrum")
 
         self.pulse_initial_duration = QtGui.QDoubleSpinBox()
         self.pulse_initial_duration.setMinimum(0.0)
