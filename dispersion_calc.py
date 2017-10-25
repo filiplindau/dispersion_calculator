@@ -10,8 +10,12 @@ from xml.etree import cElementTree as ElementTree
 import os
 import logging
 import warnings
-root = logging.getLogger()
-root.setLevel(logging.DEBUG)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.CRITICAL)
+#
+# root = logging.getLogger()
+# root.setLevel(logging.DEBUG)
 warnings.filterwarnings('ignore')
 
 
@@ -77,16 +81,20 @@ class DispersionCalculator(object):
         self.N = n
         self.dt = self.t_span / n
         self.t = np.linspace(-self.t_span / 2, self.t_span / 2, np.int(n))
+        logger.debug("FFTShift")
         self.w = np.fft.fftshift((2 * np.pi * np.fft.fftfreq(np.int(n), d=self.dt)))
         ph = 0.0
         if duration_domain == 'temporal':
             tau = fwhm / np.sqrt(2 * np.log(2))
         else:
             tau = 0.441 * l_0**2 / (fwhm * self.c)
+        logger.debug("tau {0}".format(tau))
         self.E_t = np.exp(-self.t ** 2 / tau ** 2 + ph)
         self.E_w = np.fft.fftshift(np.fft.fft(self.E_t))
+        logger.debug("FFTShift done")
         self.E_t_out = self.E_t.copy()
         self.E_w_out = self.E_w.copy()
+        logger.debug("copy done")
 
     def generate_materials_dict(self):
         """
@@ -135,9 +143,9 @@ class DispersionCalculator(object):
         self.materials['bbo_e'] = bbo_e_ip
 
         materials_files = os.listdir(self.materials_path)
-        root.info("Found {0:d}".format(materials_files.__len__()))
+        logger.info("Found {0:d}".format(materials_files.__len__()))
         for mat_file in materials_files:
-            root.info(mat_file)
+            logger.info(mat_file)
             self.read_material(''.join((self.materials_path, '/', mat_file)))
 
     def add_material(self, name, b_coeff, c_coeff):
@@ -224,6 +232,7 @@ class DispersionCalculator(object):
         :param thickness: Thickness of the material (SI units)
         :return:
         """
+        logger.debug("Entering propagate_material {0}, {1}".format(name, thickness))
         try:
             k_w = (self.w + self.w_0) * self.materials[name](self.w + self.w_0) / self.c
         except KeyError:
@@ -239,13 +248,15 @@ class DispersionCalculator(object):
 
         :return:
         """
+        logger.debug("Entering reset_propagation")
         self.E_w_out = self.E_w.copy()
         self.E_t_out = self.E_t.copy()
 
     def get_temporal_intensity(self, norm=True):
+        logger.debug("Entering get_temporal_intensity")
         if self.E_t_out.size != 0:
             # Center peak in time
-            ind = np.argmax(abs(self.E_t_out))
+            ind = np.argmax(np.abs(self.E_t_out))
             shift = (self.E_t_out.shape[0] / 2 - ind).astype(np.int)
             I_t = np.abs(np.roll(self.E_t_out, shift))**2
             if norm is True:
@@ -255,6 +266,7 @@ class DispersionCalculator(object):
         return I_t
 
     def get_temporal_phase(self, linear_comp=False):
+        logger.debug("Entering get_temporal_phase")
         eps = self.phase_thr
 
         if self.E_t_out.size != 0:
@@ -298,6 +310,7 @@ class DispersionCalculator(object):
         return ph_out
 
     def get_spectral_intensity(self, norm=True):
+        logger.debug("Entering get_spectral_intensity")
         if self.E_w_out.size != 0:
             # Center peak in time
             ind = np.argmax(abs(self.E_w_out))
@@ -318,6 +331,7 @@ class DispersionCalculator(object):
         :param linear_comp: If true, the linear part of the phase (i.e. time shift) if removed
         :return: Spectral phase vector.
         """
+        logger.debug("Entering get_spectral_phase")
         eps = self.phase_thr    # Threshold for intensity where we have signal
 
         # Check if there is a reconstructed field:
@@ -395,6 +409,7 @@ class DispersionCalculator(object):
         trace_fwhm: full width at half maximum of the intensity trace (E-field squared)
         delta_ph: phase difference (max-min) of the phase trace
         """
+        logger.debug("Entering get_pulse_duration")
         if domain == 'temporal':
             I = self.get_temporal_intensity(True)
             x = self.get_t()
@@ -408,6 +423,7 @@ class DispersionCalculator(object):
             trace_fwhm = x[x_ind[-1]] - x[x_ind[0]]
         else:
             trace_fwhm = np.nan
+        logger.debug("t_fwhm: {0}".format(trace_fwhm))
         return trace_fwhm
 
     def get_t(self):

@@ -2,9 +2,9 @@
 
 
 ### Synopsis
-Calculation of linear dispersion through materials. The materials are specified with their
-    Sellmeier coefficients and stored in a dictionary. At creation an internal set of materials
-    is generated (air, fused silica (fs), bbo, sapphire, MgF2) and a materials directory (./materials)
+Calculation of linear dispersion of short laser pulses through transparent materials.
+The materials are specified with their Sellmeier coefficients and stored in a dictionary.
+At creation an internal set of materials is generated (air, fused silica (fs), bbo, sapphire, MgF2) and a materials directory (./materials)
     is scanned for XML files for additional materials.
     The XML files contain a sellmeier element and a list of tags A, B, and C with the coefficients.
 
